@@ -1,0 +1,112 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>SDII to WAV (IOSE Utility)</title>
+</head>
+<body style="background:#121212;color:#eee;text-align:center;padding:50px;font-family:sans-serif;">
+    <h2 style="letter-spacing:2px;font-size:2em;margin-bottom:10px;">SDII to WAV</h2>
+    <p style="color:#888;margin-bottom:40px;">IOSE Utility - 読めないデータは存在しない。</p>
+    
+    <div id="drop" style="border:2px dashed #555;padding:80px;border-radius:10px;cursor:pointer;max-width:600px;margin:0 auto;transition:0.3s;">
+        <div style="font-size:1.2em;margin-bottom:10px;">ここにSDIIファイルをまとめてドロップ</div>
+        <span style="font-size:0.9em;color:#888;">（複数ファイルの一括変換に対応しています）</span>
+        <input type="file" id="fileInput" multiple style="display:none;">
+    </div>
+    
+    <div id="result-container" style="display:none; margin-top:30px; max-width:700px; margin-left:auto; margin-right:auto; text-align:left;">
+        <div style="text-align:center; margin-bottom:20px;">
+            <button id="reset" style="background:#555;color:white;padding:10px 24px;border:none;border-radius:6px;font-size:16px;cursor:pointer;transition:0.3s;" onmouseover="this.style.background='#777'" onmouseout="this.style.background='#555'">最初に戻る（リセット）</button>
+        </div>
+        <div id="list"></div>
+    </div>
+
+    <script>
+        const drop = document.getElementById('drop'), 
+              fileInput = document.getElementById('fileInput'),
+              resultContainer = document.getElementById('result-container'),
+              list = document.getElementById('list'),
+              resetBtn = document.getElementById('reset');
+        
+        // クリックでのファイル選択も複数対応
+        drop.onclick = () => fileInput.click();
+        fileInput.onchange = e => handleFiles(e.target.files);
+        
+        // ドラッグ＆ドロップ処理
+        drop.ondragover = e => { e.preventDefault(); drop.style.borderColor = '#4CAF50'; };
+        drop.ondragleave = e => { drop.style.borderColor = '#555'; };
+        drop.ondrop = e => {
+            e.preventDefault();
+            drop.style.borderColor = '#555';
+            handleFiles(e.dataTransfer.files); // 複数のファイル群を渡す
+        };
+        
+        function handleFiles(files) {
+            if(files.length === 0) return;
+            drop.style.display = 'none';
+            resultContainer.style.display = 'block';
+            
+            // 渡された全てのファイルをループ処理で一気に変換
+            Array.from(files).forEach(file => {
+                const r = new FileReader();
+                r.onload = ev => {
+                    const b = ev.target.result, ds = b.byteLength;
+                    const w = new ArrayBuffer(44 + ds), v = new DataView(w), rv = new DataView(b);
+                    const ws = (o, s) => { for(let i=0; i<s.length; i++) v.setUint8(o+i, s.charCodeAt(i)); };
+                    
+                    // WAVヘッダ構築
+                    ws(0,'RIFF'); v.setUint32(4, 36+ds, true); ws(8,'WAVE'); ws(12,'fmt ');
+                    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 2, true);
+                    v.setUint32(24, 44100, true); v.setUint32(28, 44100*4, true); v.setUint16(32, 4, true); v.setUint16(34, 16, true);
+                    ws(36,'data'); v.setUint32(40, ds, true);
+                    
+                    // エンディアン反転処理
+                    let o = 44; 
+                    for(let i=0; i<ds; i+=2) { 
+                        if(i+1<ds) v.setInt16(o, rv.getInt16(i, false), true); 
+                        o+=2; 
+                    }
+                    
+                    const u = URL.createObjectURL(new Blob([w], {type:'audio/wav'}));
+                    
+                    // 変換されたファイルごとの表示ブロック（カード）を作成
+                    const item = document.createElement('div');
+                    item.style.cssText = "background:#1e1e1e; padding:20px; border-radius:8px; margin-bottom:15px; display:flex; flex-direction:column; gap:10px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);";
+                    
+                    const title = document.createElement('div');
+                    title.textContent = "🎵 " + file.name;
+                    title.style.fontSize = "1.1em";
+                    
+                    const player = document.createElement('audio');
+                    player.controls = true;
+                    player.src = u;
+                    player.style.width = "100%";
+                    
+                    const dl = document.createElement('a');
+                    dl.href = u;
+                    dl.download = file.name + '.wav';
+                    dl.textContent = "WAVをダウンロード";
+                    dl.style.cssText = "background:#4CAF50;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;text-align:center;font-size:15px;display:inline-block;width:fit-content;transition:0.3s;";
+                    dl.onmouseover = function() { this.style.background = '#45a049'; }
+                    dl.onmouseout = function() { this.style.background = '#4CAF50'; }
+                    
+                    item.appendChild(title);
+                    item.appendChild(player);
+                    item.appendChild(dl);
+                    list.appendChild(item); // リストに追加していく
+                };
+                r.readAsArrayBuffer(file);
+            });
+        }
+
+        // リセット処理
+        resetBtn.onclick = () => {
+            list.innerHTML = ''; // リストを空にする
+            resultContainer.style.display = 'none';
+            drop.style.display = 'block';
+            fileInput.value = '';
+        };
+    </script>
+</body>
+</html>
